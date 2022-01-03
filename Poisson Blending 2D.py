@@ -1,14 +1,13 @@
 # Haim Segal
 import numpy as np
 from scipy.sparse import csr_matrix
-import PIL
-from matplotlib import pyplot
+from PIL import Image
 from pyamg.gallery import poisson
 import pyamg
 
 
 def imageToRgb(imagePath):
-    return PIL.Image.Image.split(PIL.Image.open(imagePath))
+    return Image.Image.split(Image.open(imagePath))
 
 def topLeftCornerOfSrcOnDst(srcImgShape, dstImgShape, horizontalBias=-200, verticalBias=-350):
     center = (dstImgShape[0] // 2 + horizontalBias, dstImgShape[1] // 2 + verticalBias)
@@ -73,11 +72,11 @@ def buildLinearSystem(srcImg, dstUnderSrc, mixedGrad, linearCombination, weight,
     a = construct_coefficient_mat(bShape)
     return a, b, bShape
 
-def solveLinearSystem(a, b, bShape, minColor, maxColor):
+def solveLinearSystem(a, b, bShape):
     multi_level = pyamg.ruge_stuben_solver(csr_matrix(a))
     x = multi_level.solve(b, tol=1e-10).reshape(bShape)
-    x[x < minColor] = minColor
-    x[x > maxColor] = maxColor
+    x[x < 0] = 0
+    x[x > 255] = 255
     return x
 
 def constructMixedAndNaive(dstImg, srcImg, corner, x, bShape, poissonBlended, naiveBlended):
@@ -85,17 +84,15 @@ def constructMixedAndNaive(dstImg, srcImg, corner, x, bShape, poissonBlended, na
     naive = dstImg.copy()
     mixed[corner[0] + 1:corner[0] + 1 + bShape[0], corner[1] + 1:corner[1] + 1 + bShape[1]] = x
     naive[corner[0]:corner[0] + srcImg.shape[0], corner[1]:corner[1] + srcImg.shape[1]] = srcImg
-    poissonBlended.append(PIL.Image.fromarray(mixed))
-    naiveBlended.append(PIL.Image.fromarray(naive))
+    poissonBlended.append(Image.fromarray(mixed))
+    naiveBlended.append(Image.fromarray(naive))
 
 def mergeSaveShow(splittedImg, ImgName, ImgTitle):
-    blended = PIL.Image.merge('RGB', tuple(splittedImg))
+    blended = Image.merge('RGB', tuple(splittedImg))
     blended.save(ImgName)
     blended.show(ImgTitle)
 
 def poissonBlending(srcImgPath, dstImgPath, mixedGrad=True, linearCombination=False, product=0.5, weight=0.5):
-    minColor = 0
-    maxColor = 255
     poissonBlended = []
     naiveBlended = []
     srcRgbImg = imageToRgb(srcImgPath)
@@ -106,7 +103,7 @@ def poissonBlending(srcImgPath, dstImgPath, mixedGrad=True, linearCombination=Fa
         corner = topLeftCornerOfSrcOnDst(srcImg.shape, dstImg.shape)
         dstUnderSrc = cropDstUnderSrc(dstImg, corner, srcImg.shape)
         a, b, bShape = buildLinearSystem(srcImg, dstUnderSrc, mixedGrad, linearCombination, weight, product)
-        x = solveLinearSystem(a, b, bShape, minColor, maxColor)
+        x = solveLinearSystem(a, b, bShape)
         constructMixedAndNaive(dstImg, srcImg, corner, x, bShape, poissonBlended, naiveBlended)
     mergeSaveShow(poissonBlended, 'poissonBlended.png', 'poissonBlended')
     mergeSaveShow(naiveBlended, 'naiveBlended.png', 'naiveBlended')
