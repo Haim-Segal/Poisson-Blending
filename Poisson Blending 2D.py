@@ -6,8 +6,9 @@ from pyamg.gallery import poisson
 import pyamg
 
 
-def imageToRgb(imagePath):
-    return Image.Image.split(Image.open(imagePath))
+def splitImageToRgb(imagePath):
+    r, g, b = Image.Image.split(Image.open(imagePath))
+    return np.asarray(r), np.asarray(g), np.asarray(b)
 
 def topLeftCornerOfSrcOnDst(srcImgShape, dstImgShape, horizontalBias=-200, verticalBias=-350):
     center = (dstImgShape[0] // 2 + horizontalBias, dstImgShape[1] // 2 + verticalBias)
@@ -87,29 +88,33 @@ def constructMixedAndNaive(dstImg, srcImg, corner, x, bShape, poissonBlended, na
     poissonBlended.append(Image.fromarray(mixed))
     naiveBlended.append(Image.fromarray(naive))
 
-def mergeSaveShow(splittedImg, ImgName, ImgTitle):
-    blended = Image.merge('RGB', tuple(splittedImg))
-    blended.save(ImgName)
-    blended.show(ImgTitle)
-
-def poissonBlending(srcImgPath, dstImgPath, mixedGrad=True, linearCombination=False, product=0.5, weight=0.5):
+def possionAndNaiveBlending(srcRgb, dstRgb, mixedGrad, linearCombination, weight, product):
     poissonBlended = []
     naiveBlended = []
-    srcRgbImg = imageToRgb(srcImgPath)
-    dstRgbImg = imageToRgb(dstImgPath)
     for color in range(3):
-        srcImg = np.asarray(srcRgbImg[color])
-        dstImg = np.asarray(dstRgbImg[color])
+        srcImg = srcRgb[color]
+        dstImg = dstRgb[color]
         corner = topLeftCornerOfSrcOnDst(srcImg.shape, dstImg.shape)
         dstUnderSrc = cropDstUnderSrc(dstImg, corner, srcImg.shape)
         a, b, bShape = buildLinearSystem(srcImg, dstUnderSrc, mixedGrad, linearCombination, weight, product)
         x = solveLinearSystem(a, b, bShape)
         constructMixedAndNaive(dstImg, srcImg, corner, x, bShape, poissonBlended, naiveBlended)
-    mergeSaveShow(poissonBlended, 'poissonBlended.png', 'poissonBlended')
-    mergeSaveShow(naiveBlended, 'naiveBlended.png', 'naiveBlended')
+    return poissonBlended, naiveBlended
+
+def mergeSaveShow(splittedImg, ImgName, ImgTitle):
+    merged = Image.merge('RGB', tuple(splittedImg))
+    merged.save(ImgName)
+    merged.show(ImgTitle)
+
+def poissonBlending(srcImgPath, dstImgPath, mixedGrad=True, linearCombination=False, product=0.5, weight=0.5):
+    srcRgb = splitImageToRgb(srcImgPath)
+    dstRgb = splitImageToRgb(dstImgPath)
+    poissonBlended, naiveBlended = possionAndNaiveBlending(srcRgb, dstRgb, mixedGrad, linearCombination, weight, product)
+    mergeSaveShow(poissonBlended, 'poissonBlended.png', 'Poisson Blended')
+    mergeSaveShow(naiveBlended, 'naiveBlended.png', 'Naive Blended')
 
 def main():
-    poissonBlending('src_img/old_airplane3.jpg', 'dst_img/underwater5.jpg', True, False, 1, 0)
+    poissonBlending('src_img/old_airplane3.jpg', 'dst_img/underwater5.jpg')
 
 if __name__ == '__main__':
     main()
