@@ -10,26 +10,34 @@ def splitImageToRgb(imagePath):
     r, g, b = Image.Image.split(Image.open(imagePath))
     return np.asarray(r), np.asarray(g), np.asarray(b)
 
-def topLeftCornerOfSrcOnDst(srcShape, dstShape, horizontalBias=-200, verticalBias=-350):
+def topLeftCornerOfSrcOnDst(srcShape, dstShape, horizontalBias=+50, verticalBias=+350):
     center = (dstShape[0] // 2 + horizontalBias, dstShape[1] // 2 + verticalBias)
     corner = (center[0] - srcShape[0] // 2, center[1] - srcShape[1] // 2)
     return corner
 
 def cropDstUnderSrc(dstImg, corner, srcShape):
     dstUnderSrc = dstImg[
-                   corner[0]:corner[0] + srcShape[0],
-                   corner[1]:corner[1] + srcShape[1]]
+                  corner[0]:corner[0] + srcShape[0],
+                  corner[1]:corner[1] + srcShape[1]]
     return dstUnderSrc
 
 def laplacian(array):
-    return (poisson(array.shape, format='csr') * csr_matrix(array.flatten()).transpose()).toarray()
+    return poisson(array.shape, format='csr') * csr_matrix(array.flatten()).transpose().toarray()
 
-def construct_const_vector(mixedGrad, linearCombination, dstUnderSrc, srcLaplacianed, weight, srcShape, product):
+def setBoundaryCondition(b, dstUnderSrc):
+    b[1, :] = dstUnderSrc[1, :]
+    b[-2, :] = dstUnderSrc[-2, :]
+    b[:, 1] = dstUnderSrc[:, 1]
+    b[:, -2] = dstUnderSrc[:, -2]
+    b = b[1:-1, 1: -1]
+    return b
+
+def constructConstVector(mixedGrad, linearCombination, dstUnderSrc, srcLaplacianed, weight, srcShape, product):
     if mixedGrad:
         dstLaplacianed = laplacian(dstUnderSrc)
         if linearCombination:
             b = np.reshape(
-                weight * srcLaplacianed + (1 - weight) * dstLaplacianed, srcShape)
+                linearCombination * srcLaplacianed + (1 - linearCombination) * dstLaplacianed, srcShape)
         else:
             biggerLaplacian = abs(srcLaplacianed) >= product * abs(dstLaplacianed)
             b = np.reshape(biggerLaplacian * srcLaplacianed +
@@ -37,14 +45,9 @@ def construct_const_vector(mixedGrad, linearCombination, dstUnderSrc, srcLaplaci
                            weight * ~biggerLaplacian * srcLaplacianed, srcShape)
     else:
         b = np.reshape(srcLaplacianed, srcShape)
-    b[1, :] = dstUnderSrc[1, :]
-    b[-2, :] = dstUnderSrc[-2, :]
-    b[:, 1] = dstUnderSrc[:, 1]
-    b[:, -2] = dstUnderSrc[:, -2]
-    b = b[1:-1, 1: -1]
-    return b, b.shape
+    return setBoundaryCondition(b, dstUnderSrc)
 
-def fixBoundaryCondition(coeff, shape):
+def fixCoeffDueBoundaryCondition(coeff, shape):
     shapeProd = np.prod(np.asarray(shape))
     arangeSpace = np.arange(shapeProd).reshape(shape)
     arangeSpace[1:-1, 1:-1] = -1
@@ -61,17 +64,16 @@ def fixBoundaryCondition(coeff, shape):
             coeff[j, j + shape[-1]] = 0
     return coeff
 
-def construct_coefficient_mat(shape):
+def constructCoefficientMat(shape):
     a = poisson(shape, format='lil')
-    a = fixBoundaryCondition(a, shape)
+    a = fixCoeffDueBoundaryCondition(a, shape)
     return a
 
 def buildLinearSystem(srcImg, dstUnderSrc, mixedGrad, linearCombination, weight, product):
     srcLaplacianed = laplacian(srcImg)
-    b, bShape = construct_const_vector(mixedGrad, linearCombination, dstUnderSrc, srcLaplacianed, weight,
-                                       srcImg.shape, product)
-    a = construct_coefficient_mat(bShape)
-    return a, b, bShape
+    b = constructConstVector(mixedGrad, linearCombination, dstUnderSrc, srcLaplacianed, weight, srcImg.shape, product)
+    a = constructCoefficientMat(b.shape)
+    return a, b
 
 def solveLinearSystem(a, b, bShape):
     multi_level = pyamg.ruge_stuben_solver(csr_matrix(a))
@@ -86,16 +88,16 @@ def blend(dst, patch, corner, patchShape, blended):
     blended.append(Image.fromarray(mixed))
     return blended
 
-def possionAndNaiveBlending(corner, srcRgb, dstRgb, mixedGrad, linearCombination, weight, product):
+def poissonAndNaiveBlending(corner, srcRgb, dstRgb, mixedGrad, linearCombination, weight, product):
     poissonBlended = []
     naiveBlended = []
     for color in range(3):
         src = srcRgb[color]
         dst = dstRgb[color]
         dstUnderSrc = cropDstUnderSrc(dst, corner, src.shape)
-        a, b, bShape = buildLinearSystem(src, dstUnderSrc, mixedGrad, linearCombination, weight, product)
-        x = solveLinearSystem(a, b, bShape)
-        poissonBlended = blend(dst, x, (corner[0] + 1, corner[1] + 1), bShape, poissonBlended)
+        a, b = buildLinearSystem(src, dstUnderSrc, mixedGrad, linearCombination, weight, product)
+        x = solveLinearSystem(a, b, b.shape)
+        poissonBlended = blend(dst, x, (corner[0] + 1, corner[1] + 1), b.shape, poissonBlended)
         naiveBlended = blend(dst, src, corner, src.shape, naiveBlended)
     return poissonBlended, naiveBlended
 
@@ -104,11 +106,11 @@ def mergeSaveShow(splittedImg, ImgName, ImgTitle):
     merged.save(ImgName)
     merged.show(ImgTitle)
 
-def poissonBlending(srcImgPath, dstImgPath, mixedGrad=True, linearCombination=False, product=0.5, weight=0.5):
+def poissonBlending(srcImgPath, dstImgPath, mixedGrad=True, linearCombination=False, product=0.5, weight=0.9):
     srcRgb = splitImageToRgb(srcImgPath)
     dstRgb = splitImageToRgb(dstImgPath)
     corner = topLeftCornerOfSrcOnDst(srcRgb[0].shape, dstRgb[0].shape)
-    poissonBlended, naiveBlended = possionAndNaiveBlending(corner, srcRgb, dstRgb, mixedGrad, linearCombination, weight, product)
+    poissonBlended, naiveBlended = poissonAndNaiveBlending(corner, srcRgb, dstRgb, mixedGrad, linearCombination, weight, product)
     mergeSaveShow(poissonBlended, 'poissonBlended.png', 'Poisson Blended')
     mergeSaveShow(naiveBlended, 'naiveBlended.png', 'Naive Blended')
 
