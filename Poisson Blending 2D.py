@@ -4,7 +4,7 @@ from scipy.sparse import csr_matrix
 from PIL import Image
 from pyamg.gallery import poisson
 import pyamg
-
+np.seterr(divide='ignore', invalid='ignore')
 
 def splitImageToRgb(imagePath):
     r, g, b = Image.Image.split(Image.open(imagePath))
@@ -32,14 +32,14 @@ def setBoundaryCondition(b, dstUnderSrc):
     b = b[1:-1, 1: -1]
     return b
 
-def constructConstVector(mixedGrad, linearCombination, dstUnderSrc, srcLaplacianed, weight, srcShape, product):
+def constructConstVector(mixedGrad, linearCombination, dstUnderSrc, srcLaplacianed, weight, srcShape, biggerConst):
     if mixedGrad:
         dstLaplacianed = laplacian(dstUnderSrc)
         if linearCombination:
             b = np.reshape(
                 linearCombination * srcLaplacianed + (1 - linearCombination) * dstLaplacianed, srcShape)
         else:
-            biggerLaplacian = abs(srcLaplacianed) >= product * abs(dstLaplacianed)
+            biggerLaplacian = abs(srcLaplacianed) >= biggerConst * abs(dstLaplacianed)
             b = np.reshape(biggerLaplacian * srcLaplacianed +
                            (1 - weight) * ~biggerLaplacian * dstLaplacianed +
                            weight * ~biggerLaplacian * srcLaplacianed, srcShape)
@@ -47,7 +47,7 @@ def constructConstVector(mixedGrad, linearCombination, dstUnderSrc, srcLaplacian
         b = np.reshape(srcLaplacianed, srcShape)
     return setBoundaryCondition(b, dstUnderSrc)
 
-def fixCoeffDueBoundaryCondition(coeff, shape):
+def fixCoeffUnderBoundaryCondition(coeff, shape):
     shapeProd = np.prod(np.asarray(shape))
     arangeSpace = np.arange(shapeProd).reshape(shape)
     arangeSpace[1:-1, 1:-1] = -1
@@ -66,12 +66,12 @@ def fixCoeffDueBoundaryCondition(coeff, shape):
 
 def constructCoefficientMat(shape):
     a = poisson(shape, format='lil')
-    a = fixCoeffDueBoundaryCondition(a, shape)
+    a = fixCoeffUnderBoundaryCondition(a, shape)
     return a
 
-def buildLinearSystem(srcImg, dstUnderSrc, mixedGrad, linearCombination, weight, product):
+def buildLinearSystem(srcImg, dstUnderSrc, mixedGrad, linearCombination, weight, biggerConst):
     srcLaplacianed = laplacian(srcImg)
-    b = constructConstVector(mixedGrad, linearCombination, dstUnderSrc, srcLaplacianed, weight, srcImg.shape, product)
+    b = constructConstVector(mixedGrad, linearCombination, dstUnderSrc, srcLaplacianed, weight, srcImg.shape, biggerConst)
     a = constructCoefficientMat(b.shape)
     return a, b
 
@@ -88,14 +88,14 @@ def blend(dst, patch, corner, patchShape, blended):
     blended.append(Image.fromarray(mixed))
     return blended
 
-def poissonAndNaiveBlending(corner, srcRgb, dstRgb, mixedGrad, linearCombination, weight, product):
+def poissonAndNaiveBlending(corner, srcRgb, dstRgb, mixedGrad, linearCombination, weight, biggerConst):
     poissonBlended = []
     naiveBlended = []
     for color in range(3):
         src = srcRgb[color]
         dst = dstRgb[color]
         dstUnderSrc = cropDstUnderSrc(dst, corner, src.shape)
-        a, b = buildLinearSystem(src, dstUnderSrc, mixedGrad, linearCombination, weight, product)
+        a, b = buildLinearSystem(src, dstUnderSrc, mixedGrad, linearCombination, weight, biggerConst)
         x = solveLinearSystem(a, b, b.shape)
         poissonBlended = blend(dst, x, (corner[0] + 1, corner[1] + 1), b.shape, poissonBlended)
         naiveBlended = blend(dst, src, corner, src.shape, naiveBlended)
@@ -106,16 +106,27 @@ def mergeSaveShow(splittedImg, ImgName, ImgTitle):
     merged.save(ImgName)
     merged.show(ImgTitle)
 
-def poissonBlending(srcImgPath, dstImgPath, mixedGrad=True, linearCombination=False, product=0.5, weight=0.9):
+def poissonBlending(srcImgPath, dstImgPath, mixedGrad=True, linearCombination=0.5, biggerConst=0.5, weight=0.9):
     srcRgb = splitImageToRgb(srcImgPath)
     dstRgb = splitImageToRgb(dstImgPath)
     corner = topLeftCornerOfSrcOnDst(srcRgb[0].shape, dstRgb[0].shape)
-    poissonBlended, naiveBlended = poissonAndNaiveBlending(corner, srcRgb, dstRgb, mixedGrad, linearCombination, weight, product)
+    poissonBlended, naiveBlended = poissonAndNaiveBlending(corner, srcRgb, dstRgb, mixedGrad, linearCombination, weight, biggerConst)
     mergeSaveShow(poissonBlended, 'poissonBlended.png', 'Poisson Blended')
     mergeSaveShow(naiveBlended, 'naiveBlended.png', 'Naive Blended')
 
 def main():
-    poissonBlending('src_img/old_airplane3.jpg', 'dst_img/underwater5.jpg')
+    poissonBlending('src_img/old_airplane3.jpg', 'dst_img/underwater5.jpg', True, 0.8, 1, 0.8)
+    # a = np.array(np.ones((3, 3)))
+    # b = np.array(2 * np.ones((3, 3)))
+    # c = abs(a) < abs(b)
+    # d = a / b
+    # e = (a * abs(a) + b * abs(b)) / (abs(a) + abs(b))
+
+    # print('a = ', a)
+    # print('b = ', b)
+    # print('c = ', c)
+    # print('d = ', d)
+    # print('e = ', e)
 
 if __name__ == '__main__':
     main()
