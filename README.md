@@ -1,5 +1,5 @@
 # Poisson Blending
-
+## Blending images using Poisson’s equation and sparse matrices
 
 
 ## References
