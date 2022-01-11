@@ -6,8 +6,7 @@ from pyamg.gallery import poisson
 import pyamg
 import time
 import matplotlib.pyplot as plt
-from matplotlib.path import Path
-from skimage.draw import draw, polygon
+from skimage.draw import polygon
 np.seterr(divide='ignore', invalid='ignore')
 
 
@@ -51,19 +50,15 @@ def setBoundaryCondition(b, dstUnderSrc):
     b = b[1:-1, 1: -1]
     return b
 
-def constructConstVector(mixedGrad, linearCombination, dstUnderSrc, srcLaplacianed, weight, srcShape, biggerConst):
+def constructConstVector(mask, mixedGrad, linearCombination, dstUnderSrc, srcLaplacianed, srcShape):
+    dstLaplacianed = laplacian(dstUnderSrc)
     if mixedGrad:
-        dstLaplacianed = laplacian(dstUnderSrc)
-        if linearCombination:
-            b = np.reshape(
-                linearCombination * srcLaplacianed + (1 - linearCombination) * dstLaplacianed, srcShape)
-        else:
-            biggerLaplacian = abs(srcLaplacianed) >= biggerConst * abs(dstLaplacianed)
-            b = np.reshape(biggerLaplacian * srcLaplacianed +
-                           (1 - weight) * ~biggerLaplacian * dstLaplacianed +
-                           weight * ~biggerLaplacian * srcLaplacianed, srcShape)
+        b = np.reshape(linearCombination * mask * np.reshape(srcLaplacianed, srcShape) +
+                       (1 - linearCombination) * mask * np.reshape(dstLaplacianed, srcShape) +
+                       (mask - 1) * (- 1) * np.reshape(dstLaplacianed, srcShape), srcShape)
     else:
-        b = np.reshape(srcLaplacianed, srcShape)
+        b = np.reshape(mask * np.reshape(srcLaplacianed, srcShape) + (mask - 1) * (- 1) * np.reshape(dstLaplacianed, srcShape), srcShape)
+
     return setBoundaryCondition(b, dstUnderSrc)
 
 def fixCoeffUnderBoundaryCondition(coeff, shape):
@@ -88,9 +83,9 @@ def constructCoefficientMat(shape):
     a = fixCoeffUnderBoundaryCondition(a, shape)
     return a
 
-def buildLinearSystem(srcImg, dstUnderSrc, mixedGrad, linearCombination, weight, biggerConst):
+def buildLinearSystem(mask, srcImg, dstUnderSrc, mixedGrad, linearCombination, weight, biggerConst):
     srcLaplacianed = laplacian(srcImg)
-    b = constructConstVector(mixedGrad, linearCombination, dstUnderSrc, srcLaplacianed, weight, srcImg.shape, biggerConst)
+    b = constructConstVector(mask, mixedGrad, linearCombination, dstUnderSrc, srcLaplacianed, srcImg.shape)
     a = constructCoefficientMat(b.shape)
     return a, b
 
@@ -111,16 +106,10 @@ def poissonAndNaiveBlending(mask, corner, srcRgb, dstRgb, mixedGrad, linearCombi
     poissonBlended = []
     naiveBlended = []
     for color in range(3):
-        src = srcRgb[color] * mask
         src = srcRgb[color]
-        # plt.figure(1)
-        # plt.imshow(src, cmap='gray')
-        # plt.figure(2)
-        # plt.imshow(src * mask)
-        # plt.show()
         dst = dstRgb[color]
         dstUnderSrc = cropDstUnderSrc(dst, corner, src.shape)
-        a, b = buildLinearSystem(src, dstUnderSrc, mixedGrad, linearCombination, weight, biggerConst)
+        a, b = buildLinearSystem(mask, src, dstUnderSrc, mixedGrad, linearCombination, weight, biggerConst)
         x = solveLinearSystem(a, b, b.shape)
         poissonBlended = blend(dst, x, (corner[0] + 1, corner[1] + 1), b.shape, poissonBlended)
         naiveBlended = blend(dst, src, corner, src.shape, naiveBlended)
@@ -131,10 +120,8 @@ def mergeSaveShow(splittedImg, ImgName, ImgTitle):
     merged.save(ImgName)
     merged.show(ImgTitle)
 
-def poissonBlending(srcImgPath, dstImgPath, mixedGrad=True, linearCombination=0.5, biggerConst=0.5, weight=0.9):
+def poissonBlending(srcImgPath, dstImgPath, mixedGrad=True, linearCombination=0.8, biggerConst=0.5, weight=0.9):
     srcGray = rgbToGrayMat(srcImgPath)
-    # plt.imshow(srcGray, cmap='gray')
-    # plt.show()
     mask = polyMask(srcGray)
     plt.imshow(mask, cmap='gray')
     plt.show()
@@ -145,144 +132,8 @@ def poissonBlending(srcImgPath, dstImgPath, mixedGrad=True, linearCombination=0.
     mergeSaveShow(poissonBlended, 'poissonBlended.png', 'Poisson Blended')
     mergeSaveShow(naiveBlended, 'naiveBlended.png', 'Naive Blended')
 
-def tellme(s):
-    plt.title(s, fontsize=16)
-    # plt.draw()
-
-
 def main():
-    poissonBlending('src_img/old_airplane3.jpg', 'dst_img/underwater5.jpg', True, 0.8, 1, 0.8)
-
-    # img = 0.5*np.ones((500, 500, 3), dtype=np.double)
-    #
-    # mask = polyMask(img)
-    # plt.imshow(mask, vmin=0, vmax=1, cmap='gray')
-    # plt.show()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    #
-    # poly = np.array((
-    #     (300, 300),
-    #     (480, 320),
-    #     (380, 430),
-    #     (220, 590),
-    #     (300, 300),
-    # ))
-    # rr, cc = polygon(poly[:, 0], poly[:, 1], img.shape)
-    # img[rr, cc, :] = 1
-    # plt.imshow(img)
-    # plt.show()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    #
-    # nx, ny = 100, 100
-    # poly_verts = [(2, 2), (50, 10), (86, 92), (20, 23), (10, 10)]
-    #
-    # # Create vertex coordinates for each grid cell...
-    # # (<0,0> is at the top left of the grid in this system)
-    # x, y = np.meshgrid(np.arange(nx), np.arange(ny))
-    # x, y = x.flatten(), y.flatten()
-    #
-    # points = np.vstack((x, y)).T
-    #
-    # path = Path(poly_verts)
-    # grid = path.contains_points(points)
-    # grid = grid.reshape((ny, nx))
-    # mask = np.asarray(grid)
-    #
-    # # print(grid)
-    # # print('type(grid) =', type(grid))
-    # # print('grid.shape =', grid.shape)
-    # # plt.plot(grid)
-    # # plt.imshow(mask, cmap='gray')
-    # plt.figure()
-    # plt.xlim(0, 1)
-    # plt.ylim(0, 1)
-    # pts = []
-    # numOfPoints = 3
-    # while len(pts) < numOfPoints:
-    #     tellme('Select ' + str(numOfPoints) + ' corners with mouse')
-    #     pts = np.asarray(plt.ginput(numOfPoints, timeout=-1))
-    #     if len(pts) < numOfPoints:
-    #         tellme('Too few points, starting over')
-    #         time.sleep(1)  # Wait a second
-    # ph = plt.fill(pts[:, 0], pts[:, 1], 'k', lw=2)
-    # print('type(ph[0]) =', type(ph[0]))
-    #
-    # plt.show()
-    #
-    # row, col = draw.polygon((100, 200, 800), (100, 700, 400))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # plt.figure()
-    # plt.xlim(0, 1)
-    # plt.ylim(0, 1)
-    #
-    # tellme('You will define a triangle, click to begin')
-    #
-    # plt.waitforbuttonpress()
-    #
-    # while True:
-    #     pts = []
-    #     numOfPoints = 3
-    #     while len(pts) < numOfPoints:
-    #         tellme('Select ' + str(numOfPoints) + ' corners with mouse')
-    #         pts = np.asarray(plt.ginput(numOfPoints, timeout=-1))
-    #         if len(pts) < numOfPoints:
-    #             tellme('Too few points, starting over')
-    #             time.sleep(1)  # Wait a second
-    #     ph = plt.fill(pts[:, 0], pts[:, 1], 'k', lw=2)
-    #     tellme('Happy? Key click for yes, mouse click for no')
-    #
-    #     if plt.waitforbuttonpress():
-    #         break
-    #
-    #     # Get rid of fill
-    #     for p in ph:
-    #         p.remove()
-
+    poissonBlending('src_img/old_airplane3.jpg', 'dst_img/underwater5.jpg', True, 0.7, 1, 0.8)
 
 if __name__ == '__main__':
     main()
