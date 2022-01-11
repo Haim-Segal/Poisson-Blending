@@ -4,11 +4,14 @@ from scipy.sparse import csr_matrix
 from PIL import Image
 from pyamg.gallery import poisson
 import pyamg
-import time
 import matplotlib.pyplot as plt
 from skimage.draw import polygon
 np.seterr(divide='ignore', invalid='ignore')
 
+
+def rgbToGrayMat(imagePath):
+    grayImg = Image.open(imagePath).convert('L')
+    return np.asarray(grayImg)
 
 def polyMask(img, numOfPoints=100):
     plt.imshow(img, cmap='gray')
@@ -17,12 +20,15 @@ def polyMask(img, numOfPoints=100):
     rr, cc = polygon(tuple(pts[:, 1]), tuple(pts[:, 0]), img.shape)
     mask = np.zeros(img.shape, dtype=np.double)
     mask[rr, cc] = 1
-    return mask
+    return mask, int(np.ceil(np.min(pts[:, 1]))), int(np.floor(np.max(pts[:, 1]))), int(np.ceil(np.min(pts[:, 0]))), int(np.floor(np.max(pts[:, 0])))
 
-def rgbToGrayMat(imagePath):
-    grayImg = Image.open(imagePath).convert('L')
-    return np.asarray(grayImg)
-
+def splitImageToRgbSrc(imagePath, min0, max0, min1, max1):
+    r, g, b = Image.Image.split(Image.open(imagePath))
+    # print('np.asarray(r).shape =', np.asarray(r).shape)
+    r = np.asarray(r)[min0: max0, min1: max1]
+    g = np.asarray(g)[min0: max0, min1: max1]
+    b = np.asarray(b)[min0: max0, min1: max1]
+    return r, g, b
 
 def splitImageToRgb(imagePath):
     r, g, b = Image.Image.split(Image.open(imagePath))
@@ -83,7 +89,7 @@ def constructCoefficientMat(shape):
     a = fixCoeffUnderBoundaryCondition(a, shape)
     return a
 
-def buildLinearSystem(mask, srcImg, dstUnderSrc, mixedGrad, linearCombination, weight, biggerConst):
+def buildLinearSystem(mask, srcImg, dstUnderSrc, mixedGrad, linearCombination):
     srcLaplacianed = laplacian(srcImg)
     b = constructConstVector(mask, mixedGrad, linearCombination, dstUnderSrc, srcLaplacianed, srcImg.shape)
     a = constructCoefficientMat(b.shape)
@@ -102,14 +108,14 @@ def blend(dst, patch, corner, patchShape, blended):
     blended.append(Image.fromarray(mixed))
     return blended
 
-def poissonAndNaiveBlending(mask, corner, srcRgb, dstRgb, mixedGrad, linearCombination, weight, biggerConst):
+def poissonAndNaiveBlending(mask, corner, srcRgb, dstRgb, mixedGrad, linearCombination):
     poissonBlended = []
     naiveBlended = []
     for color in range(3):
         src = srcRgb[color]
         dst = dstRgb[color]
         dstUnderSrc = cropDstUnderSrc(dst, corner, src.shape)
-        a, b = buildLinearSystem(mask, src, dstUnderSrc, mixedGrad, linearCombination, weight, biggerConst)
+        a, b = buildLinearSystem(mask, src, dstUnderSrc, mixedGrad, linearCombination)
         x = solveLinearSystem(a, b, b.shape)
         poissonBlended = blend(dst, x, (corner[0] + 1, corner[1] + 1), b.shape, poissonBlended)
         naiveBlended = blend(dst, src, corner, src.shape, naiveBlended)
@@ -120,20 +126,21 @@ def mergeSaveShow(splittedImg, ImgName, ImgTitle):
     merged.save(ImgName)
     merged.show(ImgTitle)
 
-def poissonBlending(srcImgPath, dstImgPath, mixedGrad=True, linearCombination=0.8, biggerConst=0.5, weight=0.9):
+def poissonBlending(srcImgPath, dstImgPath, mixedGrad=True, linearCombination=0.8):
     srcGray = rgbToGrayMat(srcImgPath)
-    mask = polyMask(srcGray)
+    mask, min0, max0, min1, max1 = polyMask(srcGray)
+    mask = mask[min0: max0, min1: max1]
     plt.imshow(mask, cmap='gray')
     plt.show()
-    srcRgb = splitImageToRgb(srcImgPath)
+    srcRgb = splitImageToRgbSrc(srcImgPath, min0, max0, min1, max1)
     dstRgb = splitImageToRgb(dstImgPath)
     corner = topLeftCornerOfSrcOnDst(srcRgb[0].shape, dstRgb[0].shape)
-    poissonBlended, naiveBlended = poissonAndNaiveBlending(mask, corner, srcRgb, dstRgb, mixedGrad, linearCombination, weight, biggerConst)
+    poissonBlended, naiveBlended = poissonAndNaiveBlending(mask, corner, srcRgb, dstRgb, mixedGrad, linearCombination)
     mergeSaveShow(poissonBlended, 'poissonBlended.png', 'Poisson Blended')
     mergeSaveShow(naiveBlended, 'naiveBlended.png', 'Naive Blended')
 
 def main():
-    poissonBlending('src_img/old_airplane3.jpg', 'dst_img/underwater5.jpg', True, 0.7, 1, 0.8)
+    poissonBlending('src_img/old_airplane3.jpg', 'dst_img/underwater5.jpg', True, 0.6)
 
 if __name__ == '__main__':
     main()
