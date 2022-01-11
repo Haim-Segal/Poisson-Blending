@@ -4,7 +4,26 @@ from scipy.sparse import csr_matrix
 from PIL import Image
 from pyamg.gallery import poisson
 import pyamg
+import time
+import matplotlib.pyplot as plt
+from matplotlib.path import Path
+from skimage.draw import draw, polygon
 np.seterr(divide='ignore', invalid='ignore')
+
+
+def polyMask(img, numOfPoints=100):
+    plt.imshow(img, cmap='gray')
+    plt.title('Select up to ' + str(numOfPoints) + ' points with the mouse', fontsize=16)
+    pts = np.asarray(plt.ginput(numOfPoints, timeout=-1))
+    rr, cc = polygon(tuple(pts[:, 1]), tuple(pts[:, 0]), img.shape)
+    mask = np.zeros(img.shape, dtype=np.double)
+    mask[rr, cc] = 1
+    return mask
+
+def rgbToGrayMat(imagePath):
+    grayImg = Image.open(imagePath).convert('L')
+    return np.asarray(grayImg)
+
 
 def splitImageToRgb(imagePath):
     r, g, b = Image.Image.split(Image.open(imagePath))
@@ -88,11 +107,17 @@ def blend(dst, patch, corner, patchShape, blended):
     blended.append(Image.fromarray(mixed))
     return blended
 
-def poissonAndNaiveBlending(corner, srcRgb, dstRgb, mixedGrad, linearCombination, weight, biggerConst):
+def poissonAndNaiveBlending(mask, corner, srcRgb, dstRgb, mixedGrad, linearCombination, weight, biggerConst):
     poissonBlended = []
     naiveBlended = []
     for color in range(3):
+        src = srcRgb[color] * mask
         src = srcRgb[color]
+        # plt.figure(1)
+        # plt.imshow(src, cmap='gray')
+        # plt.figure(2)
+        # plt.imshow(src * mask)
+        # plt.show()
         dst = dstRgb[color]
         dstUnderSrc = cropDstUnderSrc(dst, corner, src.shape)
         a, b = buildLinearSystem(src, dstUnderSrc, mixedGrad, linearCombination, weight, biggerConst)
@@ -107,26 +132,157 @@ def mergeSaveShow(splittedImg, ImgName, ImgTitle):
     merged.show(ImgTitle)
 
 def poissonBlending(srcImgPath, dstImgPath, mixedGrad=True, linearCombination=0.5, biggerConst=0.5, weight=0.9):
+    srcGray = rgbToGrayMat(srcImgPath)
+    # plt.imshow(srcGray, cmap='gray')
+    # plt.show()
+    mask = polyMask(srcGray)
+    plt.imshow(mask, cmap='gray')
+    plt.show()
     srcRgb = splitImageToRgb(srcImgPath)
     dstRgb = splitImageToRgb(dstImgPath)
     corner = topLeftCornerOfSrcOnDst(srcRgb[0].shape, dstRgb[0].shape)
-    poissonBlended, naiveBlended = poissonAndNaiveBlending(corner, srcRgb, dstRgb, mixedGrad, linearCombination, weight, biggerConst)
+    poissonBlended, naiveBlended = poissonAndNaiveBlending(mask, corner, srcRgb, dstRgb, mixedGrad, linearCombination, weight, biggerConst)
     mergeSaveShow(poissonBlended, 'poissonBlended.png', 'Poisson Blended')
     mergeSaveShow(naiveBlended, 'naiveBlended.png', 'Naive Blended')
 
+def tellme(s):
+    plt.title(s, fontsize=16)
+    # plt.draw()
+
+
 def main():
     poissonBlending('src_img/old_airplane3.jpg', 'dst_img/underwater5.jpg', True, 0.8, 1, 0.8)
-    # a = np.array(np.ones((3, 3)))
-    # b = np.array(2 * np.ones((3, 3)))
-    # c = abs(a) < abs(b)
-    # d = a / b
-    # e = (a * abs(a) + b * abs(b)) / (abs(a) + abs(b))
 
-    # print('a = ', a)
-    # print('b = ', b)
-    # print('c = ', c)
-    # print('d = ', d)
-    # print('e = ', e)
+    # img = 0.5*np.ones((500, 500, 3), dtype=np.double)
+    #
+    # mask = polyMask(img)
+    # plt.imshow(mask, vmin=0, vmax=1, cmap='gray')
+    # plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    #
+    # poly = np.array((
+    #     (300, 300),
+    #     (480, 320),
+    #     (380, 430),
+    #     (220, 590),
+    #     (300, 300),
+    # ))
+    # rr, cc = polygon(poly[:, 0], poly[:, 1], img.shape)
+    # img[rr, cc, :] = 1
+    # plt.imshow(img)
+    # plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    #
+    # nx, ny = 100, 100
+    # poly_verts = [(2, 2), (50, 10), (86, 92), (20, 23), (10, 10)]
+    #
+    # # Create vertex coordinates for each grid cell...
+    # # (<0,0> is at the top left of the grid in this system)
+    # x, y = np.meshgrid(np.arange(nx), np.arange(ny))
+    # x, y = x.flatten(), y.flatten()
+    #
+    # points = np.vstack((x, y)).T
+    #
+    # path = Path(poly_verts)
+    # grid = path.contains_points(points)
+    # grid = grid.reshape((ny, nx))
+    # mask = np.asarray(grid)
+    #
+    # # print(grid)
+    # # print('type(grid) =', type(grid))
+    # # print('grid.shape =', grid.shape)
+    # # plt.plot(grid)
+    # # plt.imshow(mask, cmap='gray')
+    # plt.figure()
+    # plt.xlim(0, 1)
+    # plt.ylim(0, 1)
+    # pts = []
+    # numOfPoints = 3
+    # while len(pts) < numOfPoints:
+    #     tellme('Select ' + str(numOfPoints) + ' corners with mouse')
+    #     pts = np.asarray(plt.ginput(numOfPoints, timeout=-1))
+    #     if len(pts) < numOfPoints:
+    #         tellme('Too few points, starting over')
+    #         time.sleep(1)  # Wait a second
+    # ph = plt.fill(pts[:, 0], pts[:, 1], 'k', lw=2)
+    # print('type(ph[0]) =', type(ph[0]))
+    #
+    # plt.show()
+    #
+    # row, col = draw.polygon((100, 200, 800), (100, 700, 400))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # plt.figure()
+    # plt.xlim(0, 1)
+    # plt.ylim(0, 1)
+    #
+    # tellme('You will define a triangle, click to begin')
+    #
+    # plt.waitforbuttonpress()
+    #
+    # while True:
+    #     pts = []
+    #     numOfPoints = 3
+    #     while len(pts) < numOfPoints:
+    #         tellme('Select ' + str(numOfPoints) + ' corners with mouse')
+    #         pts = np.asarray(plt.ginput(numOfPoints, timeout=-1))
+    #         if len(pts) < numOfPoints:
+    #             tellme('Too few points, starting over')
+    #             time.sleep(1)  # Wait a second
+    #     ph = plt.fill(pts[:, 0], pts[:, 1], 'k', lw=2)
+    #     tellme('Happy? Key click for yes, mouse click for no')
+    #
+    #     if plt.waitforbuttonpress():
+    #         break
+    #
+    #     # Get rid of fill
+    #     for p in ph:
+    #         p.remove()
+
 
 if __name__ == '__main__':
     main()
