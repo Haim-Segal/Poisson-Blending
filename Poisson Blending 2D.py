@@ -34,15 +34,18 @@ def splitImageToRgb(imagePath):
     return np.asarray(r), np.asarray(g), np.asarray(b)
 
 def topLeftCornerOfSrcOnDst(dst, srcShape, dstShape, horizontalBias=0, verticalBias=0):
-    center = (dstShape[0] // 2 + horizontalBias, dstShape[1] // 2 + verticalBias)
-    # print('center =', center)
     plt.imshow(dst, cmap='gray')
     plt.title('Select where you want to blend the source image un the destination image', fontsize=16)
-    center0 = plt.ginput(1, timeout=-1)
-    # print('center0[0] =', center0[0])
-    # print('type(center)) =', type(center))
-    corner = (int(center0[0][1]) - srcShape[0] // 2, int(center0[0][0]) - srcShape[1] // 2)
-    # corner = (center[0] - srcShape[0] // 2, center[1] - srcShape[1] // 2)
+    center = plt.ginput(1, timeout=-1)
+    corner = [int(center[0][1]) - srcShape[0] // 2, int(center[0][0]) - srcShape[1] // 2]
+    if corner[0] < 1:
+        corner[0] = 1
+    if corner[0] > dstShape[0] - srcShape[0] - 1:
+        corner[0] = dstShape[0] - srcShape[0] - 1
+    if corner[1] < 1:
+        corner[1] = 1
+    if corner[1] > dstShape[1] - srcShape[1] - 1:
+        corner[1] = dstShape[1] - srcShape[1] - 1
     return corner
 
 def cropDstUnderSrc(dstImg, corner, srcShape):
