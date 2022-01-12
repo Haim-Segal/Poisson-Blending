@@ -127,7 +127,8 @@ def poissonAndNaiveBlending(mask, corner, srcRgb, dstRgb, mixedGrad, linearCombi
         a, b = buildLinearSystem(mask, src, dstUnderSrc, mixedGrad, linearCombination)
         x = solveLinearSystem(a, b, b.shape)
         poissonBlended = blend(dst, x, (corner[0] + 1, corner[1] + 1), b.shape, poissonBlended)
-        naiveBlended = blend(dst, src, corner, src.shape, naiveBlended)
+        cropSrc = mask * src + (mask - 1) * (- 1) * dstUnderSrc
+        naiveBlended = blend(dst, cropSrc, corner, src.shape, naiveBlended)
     return poissonBlended, naiveBlended
 
 def mergeSaveShow(splittedImg, ImgName, ImgTitle):
