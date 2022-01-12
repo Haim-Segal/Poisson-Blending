@@ -17,26 +17,32 @@ def polyMask(img, numOfPoints=100):
     plt.imshow(img, cmap='gray')
     plt.title('Select up to ' + str(numOfPoints) + ' points with the mouse', fontsize=16)
     pts = np.asarray(plt.ginput(numOfPoints, timeout=-1))
-    rr, cc = polygon(tuple(pts[:, 1]), tuple(pts[:, 0]), img.shape)
-    mask = np.zeros(img.shape, dtype=np.double)
-    mask[rr, cc] = 1
+    row, col = polygon(tuple(pts[:, 1]), tuple(pts[:, 0]), img.shape)
+    mask = np.zeros(img.shape)
+    mask[row, col] = 1
     return mask, int(np.ceil(np.min(pts[:, 1]))), int(np.floor(np.max(pts[:, 1]))), int(np.ceil(np.min(pts[:, 0]))), int(np.floor(np.max(pts[:, 0])))
 
-def splitImageToRgbSrc(imagePath, min0, max0, min1, max1):
-    r, g, b = Image.Image.split(Image.open(imagePath))
-    # print('np.asarray(r).shape =', np.asarray(r).shape)
-    r = np.asarray(r)[min0: max0, min1: max1]
-    g = np.asarray(g)[min0: max0, min1: max1]
-    b = np.asarray(b)[min0: max0, min1: max1]
+def cropIImgByLimits(src, minRow, maxRow, minCol, maxCol):
+    r, g, b = src
+    r = r[minRow: maxRow, minCol: maxCol]
+    g = g[minRow: maxRow, minCol: maxCol]
+    b = b[minRow: maxRow, minCol: maxCol]
     return r, g, b
 
 def splitImageToRgb(imagePath):
     r, g, b = Image.Image.split(Image.open(imagePath))
     return np.asarray(r), np.asarray(g), np.asarray(b)
 
-def topLeftCornerOfSrcOnDst(srcShape, dstShape, horizontalBias=+50, verticalBias=+350):
+def topLeftCornerOfSrcOnDst(dst, srcShape, dstShape, horizontalBias=0, verticalBias=0):
     center = (dstShape[0] // 2 + horizontalBias, dstShape[1] // 2 + verticalBias)
-    corner = (center[0] - srcShape[0] // 2, center[1] - srcShape[1] // 2)
+    # print('center =', center)
+    plt.imshow(dst, cmap='gray')
+    plt.title('Select where you want to blend the source image un the destination image', fontsize=16)
+    center0 = plt.ginput(1, timeout=-1)
+    # print('center0[0] =', center0[0])
+    # print('type(center)) =', type(center))
+    corner = (int(center0[0][1]) - srcShape[0] // 2, int(center0[0][0]) - srcShape[1] // 2)
+    # corner = (center[0] - srcShape[0] // 2, center[1] - srcShape[1] // 2)
     return corner
 
 def cropDstUnderSrc(dstImg, corner, srcShape):
@@ -96,8 +102,8 @@ def buildLinearSystem(mask, srcImg, dstUnderSrc, mixedGrad, linearCombination):
     return a, b
 
 def solveLinearSystem(a, b, bShape):
-    multi_level = pyamg.ruge_stuben_solver(csr_matrix(a))
-    x = multi_level.solve(b, tol=1e-10).reshape(bShape)
+    multiLevel = pyamg.ruge_stuben_solver(csr_matrix(a))
+    x = multiLevel.solve(b, tol=1e-10).reshape(bShape)
     x[x < 0] = 0
     x[x > 255] = 255
     return x
@@ -128,19 +134,20 @@ def mergeSaveShow(splittedImg, ImgName, ImgTitle):
 
 def poissonBlending(srcImgPath, dstImgPath, mixedGrad=True, linearCombination=0.8):
     srcGray = rgbToGrayMat(srcImgPath)
-    mask, min0, max0, min1, max1 = polyMask(srcGray)
-    mask = mask[min0: max0, min1: max1]
-    plt.imshow(mask, cmap='gray')
-    plt.show()
-    srcRgb = splitImageToRgbSrc(srcImgPath, min0, max0, min1, max1)
+    mask, minRow, maxRow, minCol, maxCol = polyMask(srcGray)
+    mask = mask[minRow: maxRow, minCol: maxCol]
+    # plt.imshow(mask, cmap='gray')
+    # plt.show()
+    srcRgb = splitImageToRgb(srcImgPath)
+    srcRgb = cropIImgByLimits(srcRgb, minRow, maxRow, minCol, maxCol)
     dstRgb = splitImageToRgb(dstImgPath)
-    corner = topLeftCornerOfSrcOnDst(srcRgb[0].shape, dstRgb[0].shape)
+    corner = topLeftCornerOfSrcOnDst(dstRgb[0], srcRgb[0].shape, dstRgb[0].shape)
     poissonBlended, naiveBlended = poissonAndNaiveBlending(mask, corner, srcRgb, dstRgb, mixedGrad, linearCombination)
     mergeSaveShow(poissonBlended, 'poissonBlended.png', 'Poisson Blended')
     mergeSaveShow(naiveBlended, 'naiveBlended.png', 'Naive Blended')
 
 def main():
-    poissonBlending('src_img/old_airplane3.jpg', 'dst_img/underwater5.jpg', True, 0.6)
+    poissonBlending('src_img/old_airplane3.jpg', 'dst_img/underwater5.jpg', True, 0.5)
 
 if __name__ == '__main__':
     main()
