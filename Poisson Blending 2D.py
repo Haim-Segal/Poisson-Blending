@@ -6,6 +6,8 @@ from pyamg.gallery import poisson
 import pyamg
 import matplotlib.pyplot as plt
 from skimage.draw import polygon
+import tkinter as tk
+from tkinter import filedialog
 np.seterr(divide='ignore', invalid='ignore')
 
 
@@ -65,15 +67,11 @@ def setBoundaryCondition(b, dstUnderSrc):
     b = b[1:-1, 1: -1]
     return b
 
-def constructConstVector(mask, mixedGrad, linearCombination, dstUnderSrc, srcLaplacianed, srcShape):
+def constructConstVector(mask, mixedGrad, dstUnderSrc, srcLaplacianed, srcShape):
     dstLaplacianed = laplacian(dstUnderSrc)
-    if mixedGrad:
-        b = np.reshape(linearCombination * mask * np.reshape(srcLaplacianed, srcShape) +
-                       (1 - linearCombination) * mask * np.reshape(dstLaplacianed, srcShape) +
-                       (mask - 1) * (- 1) * np.reshape(dstLaplacianed, srcShape), srcShape)
-    else:
-        b = np.reshape(mask * np.reshape(srcLaplacianed, srcShape) + (mask - 1) * (- 1) * np.reshape(dstLaplacianed, srcShape), srcShape)
-
+    b = np.reshape((1 - mixedGrad) * mask * np.reshape(srcLaplacianed, srcShape) +
+                   mixedGrad * mask * np.reshape(dstLaplacianed, srcShape) +
+                   (mask - 1) * (- 1) * np.reshape(dstLaplacianed, srcShape), srcShape)
     return setBoundaryCondition(b, dstUnderSrc)
 
 def fixCoeffUnderBoundaryCondition(coeff, shape):
@@ -98,9 +96,9 @@ def constructCoefficientMat(shape):
     a = fixCoeffUnderBoundaryCondition(a, shape)
     return a
 
-def buildLinearSystem(mask, srcImg, dstUnderSrc, mixedGrad, linearCombination):
+def buildLinearSystem(mask, srcImg, dstUnderSrc, mixedGrad):
     srcLaplacianed = laplacian(srcImg)
-    b = constructConstVector(mask, mixedGrad, linearCombination, dstUnderSrc, srcLaplacianed, srcImg.shape)
+    b = constructConstVector(mask, mixedGrad, dstUnderSrc, srcLaplacianed, srcImg.shape)
     a = constructCoefficientMat(b.shape)
     return a, b
 
@@ -117,14 +115,14 @@ def blend(dst, patch, corner, patchShape, blended):
     blended.append(Image.fromarray(mixed))
     return blended
 
-def poissonAndNaiveBlending(mask, corner, srcRgb, dstRgb, mixedGrad, linearCombination):
+def poissonAndNaiveBlending(mask, corner, srcRgb, dstRgb, mixedGrad):
     poissonBlended = []
     naiveBlended = []
     for color in range(3):
         src = srcRgb[color]
         dst = dstRgb[color]
         dstUnderSrc = cropDstUnderSrc(dst, corner, src.shape)
-        a, b = buildLinearSystem(mask, src, dstUnderSrc, mixedGrad, linearCombination)
+        a, b = buildLinearSystem(mask, src, dstUnderSrc, mixedGrad)
         x = solveLinearSystem(a, b, b.shape)
         poissonBlended = blend(dst, x, (corner[0] + 1, corner[1] + 1), b.shape, poissonBlended)
         cropSrc = mask * src + (mask - 1) * (- 1) * dstUnderSrc
@@ -136,22 +134,29 @@ def mergeSaveShow(splittedImg, ImgName, ImgTitle):
     merged.save(ImgName)
     merged.show(ImgTitle)
 
-def poissonBlending(srcImgPath, dstImgPath, mixedGrad=True, linearCombination=0.8):
+def poissonBlending(srcImgPath, dstImgPath, mixedGrad=0.5):
     srcGray = rgbToGrayMat(srcImgPath)
     mask, minRow, maxRow, minCol, maxCol = polyMask(srcGray)
     mask = mask[minRow: maxRow, minCol: maxCol]
-    # plt.imshow(mask, cmap='gray')
-    # plt.show()
     srcRgb = splitImageToRgb(srcImgPath)
     srcRgb = cropIImgByLimits(srcRgb, minRow, maxRow, minCol, maxCol)
     dstRgb = splitImageToRgb(dstImgPath)
     corner = topLeftCornerOfSrcOnDst(dstRgb[0], srcRgb[0].shape, dstRgb[0].shape)
-    poissonBlended, naiveBlended = poissonAndNaiveBlending(mask, corner, srcRgb, dstRgb, mixedGrad, linearCombination)
+    poissonBlended, naiveBlended = poissonAndNaiveBlending(mask, corner, srcRgb, dstRgb, mixedGrad)
     mergeSaveShow(poissonBlended, 'poissonBlended.png', 'Poisson Blended')
     mergeSaveShow(naiveBlended, 'naiveBlended.png', 'Naive Blended')
 
 def main():
-    poissonBlending('src_img/eagle.png', 'dst_img/underwater5.jpg', True, 0.5)
+
+    print('Open source image')
+    root = tk.Tk()
+    root.withdraw()
+    srcImgPath = filedialog.askopenfilename()
+    print('Open destination image')
+    root = tk.Tk()
+    root.withdraw()
+    dstImgPath = filedialog.askopenfilename()
+    poissonBlending(srcImgPath, dstImgPath, 0)
 
 if __name__ == '__main__':
     main()
