@@ -15,7 +15,7 @@ def rgbToGrayMat(imagePath):
 
 def polyMask(img, numOfPoints=100):
     plt.imshow(img, cmap='gray')
-    plt.title('Select up to ' + str(numOfPoints) + ' points with the mouse', fontsize=16)
+    plt.title('Create Polygon capturing the area you want to blend')
     pts = np.asarray(plt.ginput(numOfPoints, timeout=-1))
     row, col = polygon(tuple(pts[:, 1]), tuple(pts[:, 0]), img.shape)
     mask = np.zeros(img.shape)
@@ -35,7 +35,7 @@ def splitImageToRgb(imagePath):
 
 def topLeftCornerOfSrcOnDst(dst, srcShape, dstShape, horizontalBias=0, verticalBias=0):
     plt.imshow(dst, cmap='gray')
-    plt.title('Select where you want to blend the source image un the destination image', fontsize=16)
+    plt.title('where you want to blend it..?')
     center = plt.ginput(1, timeout=-1)
     corner = [int(center[0][1]) - srcShape[0] // 2, int(center[0][0]) - srcShape[1] // 2]
     if corner[0] < 1:
@@ -151,7 +151,7 @@ def poissonBlending(srcImgPath, dstImgPath, mixedGrad=True, linearCombination=0.
     mergeSaveShow(naiveBlended, 'naiveBlended.png', 'Naive Blended')
 
 def main():
-    poissonBlending('src_img/old_airplane3.jpg', 'dst_img/underwater5.jpg', True, 0.5)
+    poissonBlending('src_img/eagle.png', 'dst_img/underwater5.jpg', True, 0.5)
 
 if __name__ == '__main__':
     main()
