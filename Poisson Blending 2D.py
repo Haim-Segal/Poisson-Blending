@@ -1,15 +1,20 @@
 # Haim Segal
 import numpy as np
-from scipy.sparse import csr_matrix
 from PIL import Image
-from pyamg.gallery import poisson
+from scipy.sparse import csr_matrix
 import pyamg
+from pyamg.gallery import poisson
 import matplotlib.pyplot as plt
 from skimage.draw import polygon
 import tkinter as tk
 from tkinter import filedialog
 np.seterr(divide='ignore', invalid='ignore')
 
+def askUserToOpenImage(srcOrDst):
+    print('Open ' + str(srcOrDst) + ' image')
+    root = tk.Tk()
+    root.withdraw()
+    return filedialog.askopenfilename()
 
 def rgbToGrayMat(imagePath):
     grayImg = Image.open(imagePath).convert('L')
@@ -19,10 +24,20 @@ def polyMask(img, numOfPoints=100):
     plt.imshow(img, cmap='gray')
     plt.title('Create Polygon capturing the area you want to blend')
     pts = np.asarray(plt.ginput(numOfPoints, timeout=-1))
-    row, col = polygon(tuple(pts[:, 1]), tuple(pts[:, 0]), img.shape)
-    mask = np.zeros(img.shape)
-    mask[row, col] = 1
-    return mask, int(np.ceil(np.min(pts[:, 1]))), int(np.floor(np.max(pts[:, 1]))), int(np.ceil(np.min(pts[:, 0]))), int(np.floor(np.max(pts[:, 0])))
+    if len(pts) < 3:
+        mask = np.ones(img.shape)
+        minRow, minCol = (0, 0)
+        maxRow, maxCol = img.shape
+    else:
+        row, col = polygon(tuple(pts[:, 1]), tuple(pts[:, 0]), img.shape)
+        minRow = int(np.ceil(np.min(pts[:, 1])))
+        maxRow = int(np.floor(np.max(pts[:, 1])))
+        minCol = int(np.ceil(np.min(pts[:, 0])))
+        maxCol = int(np.floor(np.max(pts[:, 0])))
+        mask = np.zeros(img.shape)
+        mask[row, col] = 1
+        mask = mask[minRow: maxRow, minCol: maxCol]
+    return mask, minRow, maxRow, minCol, maxCol
 
 def cropIImgByLimits(src, minRow, maxRow, minCol, maxCol):
     r, g, b = src
@@ -137,7 +152,6 @@ def mergeSaveShow(splittedImg, ImgName, ImgTitle):
 def poissonBlending(srcImgPath, dstImgPath, mixedGrad=0.5):
     srcGray = rgbToGrayMat(srcImgPath)
     mask, minRow, maxRow, minCol, maxCol = polyMask(srcGray)
-    mask = mask[minRow: maxRow, minCol: maxCol]
     srcRgb = splitImageToRgb(srcImgPath)
     srcRgb = cropIImgByLimits(srcRgb, minRow, maxRow, minCol, maxCol)
     dstRgb = splitImageToRgb(dstImgPath)
@@ -147,16 +161,9 @@ def poissonBlending(srcImgPath, dstImgPath, mixedGrad=0.5):
     mergeSaveShow(naiveBlended, 'naiveBlended.png', 'Naive Blended')
 
 def main():
-
-    print('Open source image')
-    root = tk.Tk()
-    root.withdraw()
-    srcImgPath = filedialog.askopenfilename()
-    print('Open destination image')
-    root = tk.Tk()
-    root.withdraw()
-    dstImgPath = filedialog.askopenfilename()
-    poissonBlending(srcImgPath, dstImgPath, 0)
+    srcImgPath = askUserToOpenImage('source')
+    dstImgPath = askUserToOpenImage('destination')
+    poissonBlending(srcImgPath, dstImgPath, 0.3)
 
 if __name__ == '__main__':
     main()
