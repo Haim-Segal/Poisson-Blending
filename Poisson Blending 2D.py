@@ -25,15 +25,13 @@ def polyMask(img, numOfPoints=100):
     plt.title('Create Polygon capturing the area you want to blend')
     pts = np.asarray(plt.ginput(numOfPoints, timeout=-1))
     if len(pts) < 3:
-        mask = np.ones(img.shape)
         minRow, minCol = (0, 0)
         maxRow, maxCol = img.shape
+        mask = np.ones(img.shape)
     else:
         row, col = polygon(tuple(pts[:, 1]), tuple(pts[:, 0]), img.shape)
-        minRow = int(np.ceil(np.min(pts[:, 1])))
-        maxRow = int(np.floor(np.max(pts[:, 1])))
-        minCol = int(np.ceil(np.min(pts[:, 0])))
-        maxCol = int(np.floor(np.max(pts[:, 0])))
+        minRow, minCol = np.ceil(np.min(pts, axis=0)).astype(int)
+        maxRow, maxCol = np.floor(np.max(pts, axis=0)).astype(int)
         mask = np.zeros(img.shape)
         mask[row, col] = 1
         mask = mask[minRow: maxRow, minCol: maxCol]
