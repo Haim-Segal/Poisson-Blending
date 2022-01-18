@@ -1,4 +1,6 @@
 # Haim Segal
+import tkinter as tk
+from tkinter import filedialog
 import numpy as np
 from PIL import Image
 from scipy.sparse import csr_matrix
@@ -6,11 +8,10 @@ import pyamg
 from pyamg.gallery import poisson
 import matplotlib.pyplot as plt
 from skimage.draw import polygon
-import tkinter as tk
-from tkinter import filedialog
+
 np.seterr(divide='ignore', invalid='ignore')
 
-def askUserToOpenImage(srcOrDst):
+def getImagePathFromUser(srcOrDst):
     print('Open ' + str(srcOrDst) + ' image')
     root = tk.Tk()
     root.withdraw()
@@ -22,18 +23,18 @@ def rgbToGrayMat(imagePath):
 
 def polyMask(img, numOfPoints=100):
     plt.imshow(img, cmap='gray')
-    plt.title('Create Polygon capturing the area you want to blend')
+    plt.title('Create polygon capturing the area you want to blend')
     pts = np.asarray(plt.ginput(numOfPoints, timeout=-1))
     if len(pts) < 3:
+        mask = np.ones(img.shape)
         minRow, minCol = (0, 0)
         maxRow, maxCol = img.shape
-        mask = np.ones(img.shape)
     else:
-        row, col = polygon(tuple(pts[:, 1]), tuple(pts[:, 0]), img.shape)
+        insidePolyRow, insidePolyCol = polygon(tuple(pts[:, 1]), tuple(pts[:, 0]), img.shape)
+        mask = np.zeros(img.shape)
+        mask[insidePolyRow, insidePolyCol] = 1
         minRow, minCol = np.ceil(np.min(pts, axis=0)).astype(int)
         maxRow, maxCol = np.floor(np.max(pts, axis=0)).astype(int)
-        mask = np.zeros(img.shape)
-        mask[row, col] = 1
         mask = mask[minRow: maxRow, minCol: maxCol]
     return mask, minRow, maxRow, minCol, maxCol
 
@@ -52,6 +53,8 @@ def topLeftCornerOfSrcOnDst(dst, srcShape, dstShape, horizontalBias=0, verticalB
     plt.imshow(dst, cmap='gray')
     plt.title('where you want to blend it..?')
     center = plt.ginput(1, timeout=-1)
+    if len(center) < 1:
+        center = [[dstShape[1] // 2, dstShape[0] // 2]]
     corner = [int(center[0][1]) - srcShape[0] // 2, int(center[0][0]) - srcShape[1] // 2]
     if corner[0] < 1:
         corner[0] = 1
@@ -149,9 +152,9 @@ def mergeSaveShow(splittedImg, ImgName, ImgTitle):
 
 def poissonBlending(srcImgPath, dstImgPath, mixedGrad=0.5):
     srcGray = rgbToGrayMat(srcImgPath)
-    mask, minRow, maxRow, minCol, maxCol = polyMask(srcGray)
+    mask, *maskLimits = polyMask(srcGray)
     srcRgb = splitImageToRgb(srcImgPath)
-    srcRgb = cropIImgByLimits(srcRgb, minRow, maxRow, minCol, maxCol)
+    srcRgb = cropIImgByLimits(srcRgb, *maskLimits)
     dstRgb = splitImageToRgb(dstImgPath)
     corner = topLeftCornerOfSrcOnDst(dstRgb[0], srcRgb[0].shape, dstRgb[0].shape)
     poissonBlended, naiveBlended = poissonAndNaiveBlending(mask, corner, srcRgb, dstRgb, mixedGrad)
@@ -159,8 +162,8 @@ def poissonBlending(srcImgPath, dstImgPath, mixedGrad=0.5):
     mergeSaveShow(naiveBlended, 'naiveBlended.png', 'Naive Blended')
 
 def main():
-    srcImgPath = askUserToOpenImage('source')
-    dstImgPath = askUserToOpenImage('destination')
+    srcImgPath = getImagePathFromUser('source')
+    dstImgPath = getImagePathFromUser('destination')
     poissonBlending(srcImgPath, dstImgPath, 0.3)
 
 if __name__ == '__main__':
