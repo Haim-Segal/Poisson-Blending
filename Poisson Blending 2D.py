@@ -11,37 +11,42 @@ from skimage.draw import polygon
 
 np.seterr(divide='ignore', invalid='ignore')
 
+
 def getImagePathFromUser(srcOrDst):
     print('Open ' + str(srcOrDst) + ' image')
     tk.Tk().withdraw()
     return filedialog.askopenfilename()
 
+
 def rgbToGrayMat(imagePath):
     grayImg = Image.open(imagePath).convert('L')
     return np.asarray(grayImg)
+
 
 def polyMask(imgPath, numOfPoints=100):
     img = rgbToGrayMat(imgPath)
     plt.imshow(img, cmap='gray')
     plt.title('Create polygon capturing the area you want to blend')
     pts = np.asarray(plt.ginput(numOfPoints, timeout=-1))
-    print('pts = ', pts)
     if len(pts) < 3:
         mask = np.ones(img.shape)
         minRow, minCol = (0, 0)
         maxRow, maxCol = img.shape
     else:
-        insidePolyRow, insidePolyCol = polygon(tuple(pts[:, 1]), tuple(pts[:, 0]), img.shape)
+        pts = np.fliplr(pts)
+        insidePolyRow, insidePolyCol = polygon(tuple(pts[:, 0]), tuple(pts[:, 1]), img.shape)
         mask = np.zeros(img.shape)
         mask[insidePolyRow, insidePolyCol] = 1
-        minRow, minCol = np.floor(np.min(pts, axis=0)).astype(int)
-        maxRow, maxCol = np.ceil(np.max(pts, axis=0)).astype(int)
-        # mask = mask[minRow: maxRow, minCol: maxCol]
+        minRow, minCol = np.max(np.vstack([np.floor(np.min(pts, axis=0)).astype(int).reshape((1, 2)), [0, 0]]), axis=0)
+        maxRow, maxCol = np.min(np.vstack([np.ceil(np.max(pts, axis=0)).astype(int).reshape((1, 2)), mask.shape]), axis=0)
+        mask = mask[minRow: maxRow, minCol: maxCol]
     return mask, minRow, maxRow, minCol, maxCol
+
 
 def splitImageToRgb(imagePath):
     r, g, b = Image.Image.split(Image.open(imagePath))
     return np.asarray(r), np.asarray(g), np.asarray(b)
+
 
 def cropImgByLimits(src, minRow, maxRow, minCol, maxCol):
     r, g, b = src
@@ -49,6 +54,7 @@ def cropImgByLimits(src, minRow, maxRow, minCol, maxCol):
     g = g[minRow: maxRow, minCol: maxCol]
     b = b[minRow: maxRow, minCol: maxCol]
     return r, g, b
+
 
 def topLeftCornerOfSrcOnDst(dstImgPath, srcShape):
     grayDst = rgbToGrayMat(dstImgPath)
@@ -68,14 +74,17 @@ def topLeftCornerOfSrcOnDst(dstImgPath, srcShape):
         corner[1] = grayDst.shape[1] - srcShape[1] - 1
     return corner
 
+
 def cropDstUnderSrc(dstImg, corner, srcShape):
     dstUnderSrc = dstImg[
                   corner[0]:corner[0] + srcShape[0],
                   corner[1]:corner[1] + srcShape[1]]
     return dstUnderSrc
 
+
 def laplacian(array):
     return poisson(array.shape, format='csr') * csr_matrix(array.flatten()).transpose().toarray()
+
 
 def setBoundaryCondition(b, dstUnderSrc):
     b[1, :] = dstUnderSrc[1, :]
@@ -85,12 +94,14 @@ def setBoundaryCondition(b, dstUnderSrc):
     b = b[1:-1, 1: -1]
     return b
 
+
 def constructConstVector(mask, mixedGrad, dstUnderSrc, srcLaplacianed, srcShape):
     dstLaplacianed = laplacian(dstUnderSrc)
     b = np.reshape((1 - mixedGrad) * mask * np.reshape(srcLaplacianed, srcShape) +
                    mixedGrad * mask * np.reshape(dstLaplacianed, srcShape) +
                    (mask - 1) * (- 1) * np.reshape(dstLaplacianed, srcShape), srcShape)
     return setBoundaryCondition(b, dstUnderSrc)
+
 
 def fixCoeffUnderBoundaryCondition(coeff, shape):
     shapeProd = np.prod(np.asarray(shape))
@@ -109,10 +120,12 @@ def fixCoeffUnderBoundaryCondition(coeff, shape):
             coeff[j, j + shape[-1]] = 0
     return coeff
 
+
 def constructCoefficientMat(shape):
     a = poisson(shape, format='lil')
     a = fixCoeffUnderBoundaryCondition(a, shape)
     return a
+
 
 def buildLinearSystem(mask, srcImg, dstUnderSrc, mixedGrad):
     srcLaplacianed = laplacian(srcImg)
@@ -120,18 +133,21 @@ def buildLinearSystem(mask, srcImg, dstUnderSrc, mixedGrad):
     a = constructCoefficientMat(b.shape)
     return a, b
 
+
 def solveLinearSystem(a, b, bShape):
     multiLevel = pyamg.ruge_stuben_solver(csr_matrix(a))
-    x = multiLevel.solve(b, tol=1e-10).reshape(bShape)
+    x = np.reshape((multiLevel.solve(b.flatten(), tol=1e-10)), bShape)
     x[x < 0] = 0
     x[x > 255] = 255
     return x
+
 
 def blend(dst, patch, corner, patchShape, blended):
     mixed = dst.copy()
     mixed[corner[0]:corner[0] + patchShape[0], corner[1]:corner[1] + patchShape[1]] = patch
     blended.append(Image.fromarray(mixed))
     return blended
+
 
 def poissonAndNaiveBlending(mask, corner, srcRgb, dstRgb, mixedGrad):
     poissonBlended = []
@@ -147,24 +163,25 @@ def poissonAndNaiveBlending(mask, corner, srcRgb, dstRgb, mixedGrad):
         naiveBlended = blend(dst, cropSrc, corner, src.shape, naiveBlended)
     return poissonBlended, naiveBlended
 
+
 def mergeSaveShow(splittedImg, ImgTitle):
     merged = Image.merge('RGB', tuple(splittedImg))
     merged.save(ImgTitle + '.png')
     merged.show(ImgTitle)
 
+
 def main():
     srcImgPath = getImagePathFromUser('source')
     mask, *maskLimits = polyMask(srcImgPath)
-    print('*maskLimits = ', *maskLimits)
     srcRgb = splitImageToRgb(srcImgPath)
-    # srcRgbCropped = cropImgByLimits(srcRgb, *maskLimits)
-    srcRgbCropped = srcRgb
+    srcRgbCropped = cropImgByLimits(srcRgb, *maskLimits)
     dstImgPath = getImagePathFromUser('destination')
     dstRgb = splitImageToRgb(dstImgPath)
     corner = topLeftCornerOfSrcOnDst(dstImgPath, srcRgbCropped[0].shape)
-    poissonBlended, naiveBlended = poissonAndNaiveBlending(mask, corner, srcRgbCropped, dstRgb, 0.3)
+    poissonBlended, naiveBlended = poissonAndNaiveBlending(mask, corner, srcRgbCropped, dstRgb, 0)
     mergeSaveShow(poissonBlended, 'Poisson Blended')
     mergeSaveShow(naiveBlended, 'Naive Blended')
+
 
 if __name__ == '__main__':
     main()
