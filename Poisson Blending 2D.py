@@ -1,17 +1,16 @@
-import tkinter as tk
-from tkinter import filedialog
-import numpy as np
+import tkinter
 from PIL import Image
+import numpy as np
 from scipy.sparse import csr_matrix
-import pyamg
+from pyamg import ruge_stuben_solver
 from pyamg.gallery import poisson
 import matplotlib.pyplot as plt
 from skimage.draw import polygon
 
 
 def getImagePathFromUser(srcOrDst):
-    tk.Tk().withdraw()
-    return filedialog.askopenfilename(title='Open ' + str(srcOrDst) + ' image')
+    tkinter.Tk().withdraw()
+    return tkinter.filedialog.askopenfilename(title='Open ' + str(srcOrDst) + ' image')
 
 
 def rgbToGrayMat(imgPth):
@@ -22,7 +21,7 @@ def rgbToGrayMat(imgPth):
 def polyMask(imgPth, numOfPts=100):
     img = rgbToGrayMat(imgPth)
     plt.figure('source image')
-    plt.title('Inscribe the area you would like to blend inside a polygon')
+    plt.title('Inscribe the region you would like to blend inside a polygon')
     plt.imshow(img, cmap='gray')
     pts = np.asarray(plt.ginput(numOfPts, timeout=-1))
     plt.close('source image')
@@ -63,10 +62,10 @@ def topLeftCornerOfSrcOnDst(dstImgPth, srcShp):
     center = plt.ginput(2, -1, True)
     plt.close('destination image')
     if len(center) < 1:
-        center = [grayDst.shape[1] // 2, grayDst.shape[0] // 2]
+        center = [grayDst.shape[0] // 2, grayDst.shape[1] // 2]
     elif len(center) > 1:
         center = [center[0]]
-    corner = [int(center[0][1]) - srcShp[0] // 2, int(center[0][0]) - srcShp[1] // 2]
+    corner = [int(center[0]) - srcShp[0] // 2, int(center[1]) - srcShp[1] // 2]
     if corner[0] < 1:
         corner[0] = 1
     if corner[0] > grayDst.shape[0] - srcShp[0] - 1:
@@ -138,7 +137,7 @@ def buildLinearSystem(mask, srcImg, dstUnderSrc, mixedGrad):
 
 
 def solveLinearSystem(a, b, bShape):
-    multiLevel = pyamg.ruge_stuben_solver(csr_matrix(a))
+    multiLevel = ruge_stuben_solver(csr_matrix(a))
     x = np.reshape((multiLevel.solve(b.flatten(), tol=1e-10)), bShape)
     x[x < 0] = 0
     x[x > 255] = 255
@@ -174,9 +173,9 @@ def mergeSaveShow(splittedImg, ImgTtl):
 
 
 def main():
-    srcimgPth = getImagePathFromUser('source')
-    mask, *maskLimits = polyMask(srcimgPth)
-    srcRgb = splitImageToRgb(srcimgPth)
+    srcImgPth = getImagePathFromUser('source')
+    mask, *maskLimits = polyMask(srcImgPth)
+    srcRgb = splitImageToRgb(srcImgPth)
     srcRgbCropped = cropImgByLimits(srcRgb, *maskLimits)
     dstImgPth = getImagePathFromUser('destination')
     dstRgb = splitImageToRgb(dstImgPth)
