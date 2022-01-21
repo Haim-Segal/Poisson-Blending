@@ -59,13 +59,13 @@ def topLeftCornerOfSrcOnDst(dstImgPth, srcShp):
     plt.figure('destination image')
     plt.title('Where would you like to blend it..?')
     plt.imshow(grayDst, cmap='gray')
-    center = plt.ginput(2, -1, True)
+    center = np.asarray(plt.ginput(2, -1, True)).astype(int)
     plt.close('destination image')
     if len(center) < 1:
-        center = [grayDst.shape[0] // 2, grayDst.shape[1] // 2]
+        center = np.asarray([[grayDst.shape[1] // 2, grayDst.shape[0] // 2]]).astype(int)
     elif len(center) > 1:
-        center = [center[0]]
-    corner = [int(center[0]) - srcShp[0] // 2, int(center[1]) - srcShp[1] // 2]
+        center = np.asarray([center[0]])
+    corner = [center[0][1] - srcShp[0] // 2, center[0][0] - srcShp[1] // 2]
     if corner[0] < 1:
         corner[0] = 1
     if corner[0] > grayDst.shape[0] - srcShp[0] - 1:
