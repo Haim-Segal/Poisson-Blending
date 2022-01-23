@@ -2,20 +2,29 @@ import tkinter
 from PIL import Image
 import numpy as np
 from scipy.sparse import csr_matrix
-from pyamg import ruge_stuben_solver
 from pyamg.gallery import poisson
+from pyamg import ruge_stuben_solver
 import matplotlib.pyplot as plt
 from skimage.draw import polygon
 
 
-def getImagePathFromUser(srcOrDst):
+def getImagePathFromUser(msg):
     tkinter.Tk().withdraw()
-    return tkinter.filedialog.askopenfilename(title='Open ' + str(srcOrDst) + ' image')
+    return tkinter.filedialog.askopenfilename(title=msg)
 
 
 def rgbToGrayMat(imgPth):
-    grayImg = Image.open(imgPth).convert('L')
-    return np.asarray(grayImg)
+    gryImg = Image.open(imgPth).convert('L')
+    return np.asarray(gryImg)
+
+
+def getImageFromUser(msg, srcShp=(0, 0)):
+    imgPth = getImagePathFromUser(msg)
+    rgb = splitImageToRgb(imgPth)
+    if not np.all(np.asarray(srcShp) < np.asarray(rgb[0].shape)):
+        return getImageFromUser('Open destination image with resolution bigger than ' +
+                                str(tuple(np.asarray(srcShp) + 1)), srcShp)
+    return imgPth, rgb
 
 
 def polyMask(imgPth, numOfPts=100):
@@ -24,19 +33,20 @@ def polyMask(imgPth, numOfPts=100):
     plt.title('Inscribe the region you would like to blend inside a polygon')
     plt.imshow(img, cmap='gray')
     pts = np.asarray(plt.ginput(numOfPts, timeout=-1))
-    plt.close('source image')
+    plt.close('all')
     if len(pts) < 3:
-        mask = np.ones(img.shape)
         minRow, minCol = (0, 0)
         maxRow, maxCol = img.shape
+        mask = np.ones(img.shape)
     else:
         pts = np.fliplr(pts)
         inPolyRow, inPolyCol = polygon(tuple(pts[:, 0]), tuple(pts[:, 1]), img.shape)
+        minRow, minCol = (np.max(np.vstack([np.floor(np.min(pts, axis=0)).astype(int).reshape((1, 2)), (0, 0)]),
+                                 axis=0))
+        maxRow, maxCol = (np.min(np.vstack([np.ceil(np.max(pts, axis=0)).astype(int).reshape((1, 2)), img.shape]),
+                                 axis=0))
         mask = np.zeros(img.shape)
         mask[inPolyRow, inPolyCol] = 1
-        minRow, minCol = np.max(np.vstack([np.floor(np.min(pts, axis=0)).astype(int).reshape((1, 2)), [0, 0]]), axis=0)
-        maxRow, maxCol = np.min(np.vstack([np.ceil(np.max(pts, axis=0)).astype(int).reshape((1, 2)), mask.shape]),
-                                axis=0)
         mask = mask[minRow: maxRow, minCol: maxCol]
     return mask, minRow, maxRow, minCol, maxCol
 
@@ -46,7 +56,7 @@ def splitImageToRgb(imgPth):
     return np.asarray(r), np.asarray(g), np.asarray(b)
 
 
-def cropImgByLimits(src, minRow, maxRow, minCol, maxCol):
+def cropImageByLimits(src, minRow, maxRow, minCol, maxCol):
     r, g, b = src
     r = r[minRow: maxRow, minCol: maxCol]
     g = g[minRow: maxRow, minCol: maxCol]
@@ -54,27 +64,28 @@ def cropImgByLimits(src, minRow, maxRow, minCol, maxCol):
     return r, g, b
 
 
+def keepSrcInDstBoundaries(corner, gryDstShp, srcShp):
+    for idx in range(len(corner)):
+        if corner[idx] < 1:
+            corner[idx] = 1
+        if corner[idx] > gryDstShp[idx] - srcShp[idx] - 1:
+            corner[idx] = gryDstShp[idx] - srcShp[idx] - 1
+    return corner
+
+
 def topLeftCornerOfSrcOnDst(dstImgPth, srcShp):
-    grayDst = rgbToGrayMat(dstImgPth)
+    gryDst = rgbToGrayMat(dstImgPth)
     plt.figure('destination image')
     plt.title('Where would you like to blend it..?')
-    plt.imshow(grayDst, cmap='gray')
+    plt.imshow(gryDst, cmap='gray')
     center = np.asarray(plt.ginput(2, -1, True)).astype(int)
-    plt.close('destination image')
+    plt.close('all')
     if len(center) < 1:
-        center = np.asarray([[grayDst.shape[1] // 2, grayDst.shape[0] // 2]]).astype(int)
+        center = np.asarray([[gryDst.shape[1] // 2, gryDst.shape[0] // 2]]).astype(int)
     elif len(center) > 1:
         center = np.asarray([center[0]])
     corner = [center[0][1] - srcShp[0] // 2, center[0][0] - srcShp[1] // 2]
-    if corner[0] < 1:
-        corner[0] = 1
-    if corner[0] > grayDst.shape[0] - srcShp[0] - 1:
-        corner[0] = grayDst.shape[0] - srcShp[0] - 1
-    if corner[1] < 1:
-        corner[1] = 1
-    if corner[1] > grayDst.shape[1] - srcShp[1] - 1:
-        corner[1] = grayDst.shape[1] - srcShp[1] - 1
-    return corner
+    return keepSrcInDstBoundaries(corner, gryDst.shape, srcShp)
 
 
 def cropDstUnderSrc(dstImg, corner, srcShp):
@@ -166,19 +177,17 @@ def poissonAndNaiveBlending(mask, corner, srcRgb, dstRgb, mixedGrad):
     return poissonBlended, naiveBlended
 
 
-def mergeSaveShow(splittedImg, ImgTtl):
-    merged = Image.merge('RGB', tuple(splittedImg))
+def mergeSaveShow(splitImg, ImgTtl):
+    merged = Image.merge('RGB', tuple(splitImg))
     merged.save(ImgTtl + '.png')
     merged.show(ImgTtl)
 
 
 def main():
-    srcImgPth = getImagePathFromUser('source')
+    srcImgPth, srcRgb = getImageFromUser('Open source image')
     mask, *maskLimits = polyMask(srcImgPth)
-    srcRgb = splitImageToRgb(srcImgPth)
-    srcRgbCropped = cropImgByLimits(srcRgb, *maskLimits)
-    dstImgPth = getImagePathFromUser('destination')
-    dstRgb = splitImageToRgb(dstImgPth)
+    srcRgbCropped = cropImageByLimits(srcRgb, *maskLimits)
+    dstImgPth, dstRgb = getImageFromUser('Open destination image', srcRgbCropped[0].shape)
     corner = topLeftCornerOfSrcOnDst(dstImgPth, srcRgbCropped[0].shape)
     poissonBlended, naiveBlended = poissonAndNaiveBlending(mask, corner, srcRgbCropped, dstRgb, 0.3)
     mergeSaveShow(naiveBlended, 'Naive Blended')
