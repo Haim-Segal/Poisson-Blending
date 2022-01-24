@@ -17,5 +17,8 @@ original images links:
 [source image](https://www.pentaxforums.com/gallery/images/15401/1_old_airplane003.jpg), 
 [destination image](https://static.independent.co.uk/2021/09/17/18/newFile.jpg?width=990&auto=webp&quality=75&crop=982:726,smart)
 
+## Installation and Usage
+run Poisson Blending 2D.py and follow the instructions
+Enjoy!
 ## References
 [Patrick Perez, Michel Gangnet, Andrew Blake, "Poisson Image Editing".](https://www.cs.jhu.edu/~misha/Fall07/Papers/Perez03.pdf)
