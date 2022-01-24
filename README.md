@@ -12,7 +12,10 @@ naive blending
 
 Poisson blending
 ![Poisson Blended](https://user-images.githubusercontent.com/82455000/150846999-40d53c40-6abb-498e-8548-a4ba3e0623de.png)
-
+ 
+original images links: 
+[source image](https://www.pentaxforums.com/gallery/images/15401/1_old_airplane003.jpg), 
+[destination image](https://static.independent.co.uk/2021/09/17/18/newFile.jpg?width=990&auto=webp&quality=75&crop=982:726,smart)
 
 ## References
 [Patrick Perez, Michel Gangnet, Andrew Blake, "Poisson Image Editing".](https://www.cs.jhu.edu/~misha/Fall07/Papers/Perez03.pdf)
