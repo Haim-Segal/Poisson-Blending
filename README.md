@@ -8,14 +8,14 @@ In order to construct and solve this system I use the great library of Algebraic
 
 ## Results
 naive blending
-![Naive Blended](https://user-images.githubusercontent.com/82455000/150847342-74cfa2b4-cb7f-4d05-a911-5e1237ce0435.png)
+![Naive Blended](https://user-images.githubusercontent.com/82455000/150935595-3787de6a-f4e0-44dc-87e5-3c57b72ab71c.png)
 
 Poisson blending
-![Poisson Blended](https://user-images.githubusercontent.com/82455000/150846999-40d53c40-6abb-498e-8548-a4ba3e0623de.png)
+![Poisson Blended](https://user-images.githubusercontent.com/82455000/150935633-ce21a68e-1910-461b-9f24-871f09e03ea4.png)
  
 original images links: 
-[source image](https://www.pentaxforums.com/gallery/images/15401/1_old_airplane003.jpg), 
-[destination image](https://static.independent.co.uk/2021/09/17/18/newFile.jpg?width=990&auto=webp&quality=75&crop=982:726,smart)
+[source image](https://www.google.com/url?sa=i&url=https%3A%2F%2Fwww.pentaxforums.com%2Fgallery%2Fphoto-old-airplane-3-12687%2F%26u%3D15401&psig=AOvVaw0zigv5y9ES8bgUG4GMyhwJ&ust=1643183473740000&source=images&cd=vfe&ved=0CAsQjRxqFwoTCPiNidu1zPUCFQAAAAAdAAAAABAD), 
+[destination image](https://www.google.com/url?sa=i&url=https%3A%2F%2Fwww.azocleantech.com%2Fnews.aspx%3FnewsID%3D26805&psig=AOvVaw0IhVkjyN04kdRn5500daF5&ust=1643183382112000&source=images&cd=vfe&ved=0CAsQjRxqFwoTCLiZkrS1zPUCFQAAAAAdAAAAABAE)
 
 ## Installation and Usage
 run Poisson Blending 2D.py and follow the instructions
