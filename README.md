@@ -15,7 +15,7 @@ Poisson blending
  
 original images links: 
 [source image](https://www.pentaxforums.com/gallery/photo-old-airplane-3-12687/&u=15401), 
-[destination image](https://www.google.com/url?sa=i&url=https%3A%2F%2Fwww.azocleantech.com%2Fnews.aspx%3FnewsID%3D26805&psig=AOvVaw0IhVkjyN04kdRn5500daF5&ust=1643183382112000&source=images&cd=vfe&ved=0CAsQjRxqFwoTCLiZkrS1zPUCFQAAAAAdAAAAABAE)
+[destination image](https://www.azocleantech.com/news.aspx?newsID=26805)
 
 ## Installation and Usage
 run Poisson Blending 2D.py and follow the instructions
